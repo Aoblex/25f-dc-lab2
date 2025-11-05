@@ -8,7 +8,7 @@ spark = (
 )
 
 # Step 0: 读取数据
-taxi_path = "hdfs:///data/taxi_2024/*.parquet" #TODO: 根据需求修改数据源路径
+taxi_path = "hdfs:///input/nyc_taxi/sample/*.parquet" #TODO: 根据需求修改数据源路径
 df_raw = spark.read.parquet(taxi_path)
 
 #TODO: 可根据lab1 的版本修改，即是否需要数据清洗
