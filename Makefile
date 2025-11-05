@@ -28,8 +28,6 @@ test: dataset
 	spark-submit \
 	--master yarn \
 	--deploy-mode cluster \
-	--driver-memory 4g \
-	--executor-memory 4g \
 	--name Taxi-Rideshare-Recommendation \
 	scripts/starter_script_structured.py --taxi_path hdfs:///input/nyc_taxi/sample
 
