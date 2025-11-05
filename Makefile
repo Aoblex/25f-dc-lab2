@@ -1,12 +1,12 @@
 download-dataset:
-	bash scripts/download.sh 2010 01 02 03
+	bash scripts/download.sh 2010 01 02
 
 sample-dataset: download-dataset
 	python scripts/sampling.py \
 	--input ./datasets \
 	--output ./datasets/sample \
-	--rows 1000 \
-	--batch-size 100
+	--rows 250 \
+	--batch-size 50
 
 taxi-zone:
 	@if [ ! -d "datasets/taxi_zones" ]; then \
@@ -28,6 +28,8 @@ test: dataset
 	spark-submit \
 	--master yarn \
 	--deploy-mode cluster \
+	--driver-memory 4g \
+	--executor-memory 4g \
 	--name Taxi-Rideshare-Recommendation \
 	scripts/main.py --taxi_path hdfs:///input/nyc_taxi/sample
 
