@@ -1,8 +1,6 @@
 # 一、故事背景
 
-假设你刚加入一家出租车行数据分析团队。在前一轮作业和练习中，你已经掌握了
-Spark
-分析公司数据的方法。现在，团队希望利用历史出租车行程数据开发一个**拼车推荐模型**：为用户推荐可以拼车的乘客。
+假设你刚加入一家出租车行数据分析团队。在前一轮作业和练习中，你已经掌握了 Spark 分析公司数据的方法。现在，团队希望利用历史出租车行程数据开发一个**拼车推荐模型**：为用户推荐可以拼车的乘客。
 
 你仔细研究了公司数据，设计了数据处理与建模流程：
 
@@ -15,16 +13,14 @@ Spark
 
 4.  **模型使用与部署**：在生产环境中应用模型，实现推荐。（本次作业不要求）
 
-在此基础上，你编写了一个可以运行的 Spark
-程序（starter_script.py）。你在集群上进行了初步测试，记录了如下信息（请在报告中填写具体数据）：
+在此基础上，你编写了一个可以运行的 Spark 程序（starter_script.py）。你在集群上进行了初步测试，记录了如下信息（请在报告中填写具体数据）：
 
 1.  硬件配置：集群节点数量、每节点 CPU 核心数、内存容量及 Spark
     的核心配置（例如 executor.instances、executor.memory、driver.memory等）。
 
 2.  数据集规模：数据来源与时间范围（例如 2024 年 1--3月），文件格式、总大小以及分区策略。
 
-3.  运行表现：总运行时间、Spark UI 中 Jobs / Stages
-    的执行图、任务数与负载分布情况。
+3.  运行表现：总运行时间、Spark UI 中 Jobs / Stages 的执行图、任务数与负载分布情况。
 
 # 二、Spark 的核心执行机制
 
@@ -32,10 +28,7 @@ Spark
 
 ## 2.1 惰性执行（Lazy Evaluation）
 
-Spark 中的大多数Transformation操作（如 select、filter、withColumn
-等）并不会立即执行。这些操作仅用于构建逻辑执行计划（Logical
-Plan），描述从输入到输出的变换关系。只有在执行Action操作（如
-count、show、collect、write），Spark 才会：
+Spark 中的大多数Transformation操作（如 select、filter、withColumn 等）并不会立即执行。这些操作仅用于构建逻辑执行计划（Logical Plan），描述从输入到输出的变换关系。只有在执行Action操作（如 count、show、collect、write），Spark 才会：
 
 1.  将逻辑计划转换为经过优化的物理执行计划（Physical Plan）；
 
@@ -43,42 +36,25 @@ count、show、collect、write），Spark 才会：
 
 3.  启动 Task 并分发至各 Executor 执行。
 
-因此，如果在同一个 DataFrame 上多次调用 Action（且未缓存），Spark
-将重复从源头执行。这是性能下降的常见原因之一。
+因此，如果在同一个 DataFrame 上多次调用 Action（且未缓存），Spark 将重复从源头执行。这是性能下降的常见原因之一。
 
 ## 2.2 Catalyst 优化器与表达式可见性
 
-Spark SQL
-的优化器（Catalyst）会在逻辑计划阶段自动执行多种优化策略，这些优化依赖于
-Spark 能够"理解"表达式的逻辑结构。然而，当用户定义 UDF（User Defined
-Function）时，函数逻辑在优化器视角中是不可见的：Catalyst
-无法对其进行下推、合并或重写，也无法生成高效的代码（Whole-Stage
-Codegen）。
-
-这可能会导致：无法提前执行过滤条件；计算无法并入上游算子；在 PySpark
-下还会引入 JVM↔Python 的序列化/反序列化开销
-
-因此，使用 UDF 会限制 Spark
-的自动优化能力。文档说明中建议在性能敏感任务中，应优先使用内置函数或表达式。
+Spark SQL 的优化器（Catalyst）会在逻辑计划阶段自动执行多种优化策略，这些优化依赖于 Spark 能够"理解"表达式的逻辑结构。然而，当用户定义 UDF（User Defined Function）时，函数逻辑在优化器视角中是不可见的：Catalyst 无法对其进行下推、合并或重写，也无法生成高效的代码（Whole-Stage Codegen）。
+这可能会导致：无法提前执行过滤条件；计算无法并入上游算子；在 PySpark 下还会引入 JVM↔Python 的序列化/反序列化开销。因此，使用 UDF 会限制 Spark 的自动优化能力。文档说明中建议在性能敏感任务中，应优先使用内置函数或表达式。
 
 ## 2.3 依赖类型与数据通信
 
 Spark 的操作之间存在两类依赖关系：
 
-- 窄依赖（Narrow Dependency）：每个输出分区仅依赖上游的一个分区（例如
-  map、filter）。这意味着此类操作可以在单节点本地完成。
+- 窄依赖（Narrow Dependency）：每个输出分区仅依赖上游的一个分区（例如 map、filter）。这意味着此类操作可以在单节点本地完成。
 
-- 宽依赖（Wide Dependency）：某个输出分区依赖多个上游分区（例如
-  join、groupBy、repartition）。此类操作需要在节点之间重新分发数据，即
-  Shuffle 过程。
+- 宽依赖（Wide Dependency）：某个输出分区依赖多个上游分区（例如 join、groupBy、repartition）。此类操作需要在节点之间重新分发数据，即 Shuffle 过程。
 
-一次 Shuffle 包含以下步骤：1.
-上游任务将数据按照键值划分并写入本地磁盘；2.
-下游任务从多个节点读取对应的数据块；3.
-对数据进行反序列化与合并。因此，Shuffle
-会引发额外的磁盘读写与网络传输，是 Spark
-作业中最主要的性能开销之一。文档说明中建议应通过设计合理的分区策略、减少宽依赖算子、使用广播小表等方式降低
-Shuffle 规模。
+一次 Shuffle 包含以下步骤：
+1. 上游任务将数据按照键值划分并写入本地磁盘；
+2. 下游任务从多个节点读取对应的数据块；
+3. 对数据进行反序列化与合并。因此，Shuffle 会引发额外的磁盘读写与网络传输，是 Spark 作业中最主要的性能开销之一。文档说明中建议应通过设计合理的分区策略、减少宽依赖算子、使用广播小表等方式降低 Shuffle 规模。
 
 ## 2.4 数据对齐与分区策略
 
@@ -89,8 +65,7 @@ Shuffle 规模。
 
 - Bucket：在物理存储层根据键建立固定数量的桶文件；
 
-- Broadcast：当一张表远小于另一张表时，将其广播到所有节点，避免大规模
-  Shuffle。
+- Broadcast：当一张表远小于另一张表时，将其广播到所有节点，避免大规模 Shuffle。
 
 通过合理的数据对齐，可以显著降低网络通信量，提高并行执行效率。
 
@@ -98,32 +73,21 @@ Shuffle 规模。
 
 Spark 在每个 Executor 内部分配的内存由两部分组成：
 
-1.  执行内存（Execution Memory）：用于 Shuffle、Join、Aggregation
-    等过程中的中间结果存储。
+1.  执行内存（Execution Memory）：用于 Shuffle、Join、Aggregation 等过程中的中间结果存储。
 
-2.  存储内存（Storage Memory）：用于缓存或持久化（Cache /
-    Persist）DataFrame 的数据块。
+2.  存储内存（Storage Memory）：用于缓存或持久化（Cache / Persist）DataFrame 的数据块。
 
-这两部分共用同一内存池。若缓存占用过多空间，执行内存将不足，系统需要将中间数据暂时写入磁盘（即"溢写"），从而增加
-I/O 时间。因此，缓存应仅应用于确实会被多次复用的数据集。
+这两部分共用同一内存池。若缓存占用过多空间，执行内存将不足，系统需要将中间数据暂时写入磁盘（即"溢写"），从而增加 I/O 时间。因此，缓存应仅应用于确实会被多次复用的数据集。
 
 ## 2.6 分区与任务并行度
 
-Spark 在执行过程中，会将数据划分为若干 分区（Partition），每个分区由一个
-任务（Task） 处理。因此，分区数量
-直接决定了可同时并行执行的任务数量，也就决定了对集群 CPU
-核心资源（Core） 的利用程度。Spark 的并行执行遵循以下原则：
+Spark 在执行过程中，会将数据划分为若干 分区（Partition），每个分区由一个任务（Task） 处理。因此，分区数量直接决定了可同时并行执行的任务数量，也就决定了对集群 CPU 核心资源（Core） 的利用程度。Spark 的并行执行遵循以下原则：
 
-1.  每个 Executor 内的并发度 由 executor.cores 控制，即每个 Executor
-    最多可同时运行多少个任务。
+1.  每个 Executor 内的并发度由 executor.cores 控制，即每个 Executor 最多可同时运行多少个任务。
 
-2.  集群总体并发度 等于所有 Executor 的 core 数量之和。例如：若集群包含
-    5 个 Executor，每个 Executor 分配 4 个 Core，则最多可同时执行 20
-    个任务。
+2.  集群总体并发度 等于所有 Executor 的 core 数量之和。例如：若集群包含 5 个 Executor，每个 Executor 分配 4 个 Core，则最多可同时执行 20 个任务。
 
-3.  任务总数 通常等于或大于分区数。当任务数少于可用 Core 数时，部分 CPU
-    会处于空闲状态；反之，任务数远多于 Core
-    数时，会导致调度与切换开销上升。
+3.  任务总数 通常等于或大于分区数。当任务数少于可用 Core 数时，部分 CPU 会处于空闲状态；反之，任务数远多于 Core 数时，会导致调度与切换开销上升。
 
 分区粒度不合理会导致两种常见问题：
 
@@ -134,18 +98,15 @@ Spark 在执行过程中，会将数据划分为若干 分区（Partition），�
 
 Spark 通过以下参数控制任务划分与并行度：
 
-- spark.sql.shuffle.partitions：控制 Shuffle 阶段（例如 Join 或
-  GroupBy）产生的分区数，默认值通常为 200。
+- spark.sql.shuffle.partitions：控制 Shuffle 阶段（例如 Join 或 GroupBy）产生的分区数，默认值通常为 200。
 
-- spark.default.parallelism：控制非 SQL 场景（如 RDD
-  计算）的默认并行度，一般根据集群核心数自动设定。
+- spark.default.parallelism：控制非 SQL 场景（如 RDD 计算）的默认并行度，一般根据集群核心数自动设定。
 
 合理设置分区能在任务粒度与调度成本之间取得平衡。
 
 # 三、性能诊断与优化主线
 
-在理解上述机制后，你需要从以下三个角度分析 starter
-代码的性能瓶颈，并进行优化：
+在理解上述机制后，你需要从以下三个角度分析 starter 代码的性能瓶颈，并进行优化：
 
 1.  编程范式（Programming Paradigm）
 
@@ -169,8 +130,7 @@ Spark 通过以下参数控制任务划分与并行度：
 
     - 缓存策略是否合理，内存是否被充分利用；
 
-    - 参数（如
-      executor.memory、spark.sql.shuffle.partitions）是否需调整。
+    - 参数（如executor.memory、spark.sql.shuffle.partitions）是否需调整。
 
 *推荐顺序：先从编程范式入手 → 再优化通信 → 最后调整配置。*
 
@@ -200,7 +160,7 @@ Spark 通过以下参数控制任务划分与并行度：
 
     - 结论与思考
 
-# **五、提交内容**
+# 五、提交内容
 
 - starter_script_optimized.py 或 SQL 等价版本；
 
