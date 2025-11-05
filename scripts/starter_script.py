@@ -1,5 +1,6 @@
 # starter_script.py
 from pyspark.sql import SparkSession, functions as F
+import os
 
 spark = (
     SparkSession.builder
@@ -8,7 +9,11 @@ spark = (
 )
 
 # Step 0: 读取数据
-taxi_path = "hdfs:///input/nyc_taxi/sample/*.parquet" #TODO: 根据需求修改数据源路径
+# 优先使用环境变量 TAXI_PATH；若未设置则使用相对本文件的本地示例数据路径
+taxi_path = os.environ.get(
+    "TAXI_PATH",
+    os.path.join(os.path.dirname(__file__), "datasets", "sample", "*.parquet"),
+)
 df_raw = spark.read.parquet(taxi_path)
 
 #TODO: 可根据lab1 的版本修改，即是否需要数据清洗
