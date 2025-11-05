@@ -1,5 +1,5 @@
 download-dataset:
-	bash download.sh 2024 01 02 03
+	bash scripts/download.sh 2024 01 02 03
 
 put-dataset:
 	hdfs dfs -mkdir -p /input/nyc_taxi/
