@@ -206,3 +206,189 @@ make test
 然后可以[查看](http://localhost:18080)刚才执行完成的任务:
 
 ![test-result](./figures/test-result.png)
+
+下面通过三个方面对程序进行优化:
+
+    1.  编程范式
+
+    2.  通信机制
+
+    3.  资源配置
+
+### 编程范式
+
+使用内置函数替代 UDF:
+
+```python
+def feature_engineering(df):
+    df_feat = (
+        df
+        .withColumn("pickup_ts", F.to_timestamp("pickup_datetime"))
+        .withColumn("pickup_hour", F.hour(F.col("pickup_ts")).cast("int"))
+        .withColumn("pickup_grid_x", F.floor(F.col("pickup_longitude") * 100).cast("int"))
+        .withColumn("pickup_grid_y", F.floor(F.col("pickup_latitude") * 100).cast("int"))
+        .withColumn("pickup_zone", F.concat_ws("_", F.col("pickup_grid_x"), F.col("pickup_grid_y")))
+        .withColumn(
+            "distance_bucket",
+            F.when(F.col("trip_distance").isNull(), F.lit("unknown"))
+             .when(F.col("trip_distance") < 2.0, F.lit("short"))
+             .when(F.col("trip_distance") < 8.0, F.lit("medium"))
+             .otherwise(F.lit("long"))
+        )
+        .withColumn("pickup_date", F.to_date("pickup_ts"))
+    )
+    df_feat.persist()  # 缓存
+    return df_feat
+```
+
+```python
+def build_candidates(df_feat):
+    df_small = (
+        df_feat
+        .select(
+            "pickup_date", "pickup_hour", "pickup_zone",
+            "pickup_latitude", "pickup_longitude",
+            "trip_distance", "passenger_count", "pickup_datetime"
+        )
+    )
+
+    a = df_small.alias("a")
+    b = df_small.alias("b")
+
+    join_cond = (
+        (F.col("a.pickup_date") == F.col("b.pickup_date")) &
+        (F.col("a.pickup_hour") == F.col("b.pickup_hour"))
+        # 注意：此步仅编程范式优化，zone 还不加入
+        &
+        (F.col("a.pickup_datetime") < F.col("b.pickup_datetime"))
+    )
+
+    candidates = a.join(b, on=join_cond, how="inner")
+
+    dx = F.col("a.pickup_latitude") - F.col("b.pickup_latitude")
+    dy = F.col("a.pickup_longitude") - F.col("b.pickup_longitude")
+    candidates = candidates.withColumn("pickup_distance", F.sqrt(F.pow(dx, 2) + F.pow(dy, 2)))
+
+    return candidates
+```
+
+```python
+def train_model(candidates):
+    train_df = (
+        candidates
+        .withColumn("label", (F.col("pickup_distance") < 0.02).cast("int"))
+        .select(
+            "label",
+            F.col("a.passenger_count").alias("passenger_a"),
+            F.col("b.passenger_count").alias("passenger_b"),
+            F.col("a.trip_distance").alias("trip_a"),
+            F.col("b.trip_distance").alias("trip_b"),
+            "pickup_distance"
+        )
+    )
+
+    assembler = VectorAssembler(
+        inputCols=["passenger_a", "passenger_b", "trip_a", "trip_b", "pickup_distance"],
+        outputCol="features"
+    )
+    train_vec = assembler.transform(train_df).select("features", "label")
+    lr = LogisticRegression(featuresCol="features", labelCol="label")
+    model = lr.fit(train_vec)
+    return model
+```
+
+### 优化通信
+
+- 限制 Join 范围（加 zone）
+
+- 按 key repartition，减少 shuffle
+
+- 避免全表笛卡尔配对
+
+```python
+def build_candidates(df_feat):
+    df_small = (
+        df_feat
+        .select(
+            "pickup_date", "pickup_hour", "pickup_zone",
+            "pickup_latitude", "pickup_longitude",
+            "trip_distance", "passenger_count", "pickup_datetime"
+        )
+    )
+
+    # 按 join key 重新分区，减少 shuffle
+    repart_keys = ["pickup_date", "pickup_hour", "pickup_zone"]
+    df_small = df_small.repartition(*repart_keys).persist()
+
+    a = df_small.alias("a")
+    b = df_small.alias("b")
+
+    join_cond = (
+        (F.col("a.pickup_date") == F.col("b.pickup_date")) &
+        (F.col("a.pickup_hour") == F.col("b.pickup_hour")) &
+        (F.col("a.pickup_zone") == F.col("b.pickup_zone")) &
+        (F.col("a.pickup_datetime") < F.col("b.pickup_datetime"))
+    )
+
+    candidates = a.join(b, on=join_cond, how="inner")
+
+    dx = F.col("a.pickup_latitude") - F.col("b.pickup_latitude")
+    dy = F.col("a.pickup_longitude") - F.col("b.pickup_longitude")
+    candidates = candidates.withColumn("pickup_distance", F.sqrt(F.pow(dx, 2) + F.pow(dy, 2)))
+
+    return candidates
+
+```
+
+### 资源配置
+
+- 控制 shuffle 阶段的分区数量
+
+- 设置 RDD 默认并行度
+
+- 开启自适应查询执行（Adaptive Query Execution, AQE）
+
+- 在 AQE 下启用小分区合并
+
+- 启用 skew join 自动优化
+
+```Makefile
+optimized-test: dataset
+	hdfs dfs -mkdir -p /spark-logs
+	spark-submit \
+	--master yarn \
+	--deploy-mode cluster \
+	--conf spark.sql.adaptive.enabled=true \
+	--conf spark.sql.adaptive.coalescePartitions.enabled=true \
+	--conf spark.sql.adaptive.skewJoin.enabled=true \
+	--conf spark.sql.shuffle.partitions=200 \
+	--conf spark.default.parallelism=24 \
+	--conf spark.eventLog.enabled=true \
+	--conf spark.eventLog.dir=hdfs:///spark-logs \
+	--name Taxi-Rideshare-Recommendation-Optimized \
+	scripts/optimized.py --taxi_path hdfs:///input/nyc_taxi/sample
+```
+
+## 实验结果
+
+在上一节的实验中，所有数据均为原始数据中采样的20000行，用于探究性能问题。
+
+下面是各个实验耗时的结果:
+
+| 优化方式 | 总耗时 |
+| --- | --- |
+| 无 | 3.0 min|
+| 编程范式 | 2.6 min |
+| 通信机制 | 39 s |
+| 资源配置 | 3.0 min |
+| 全部 | 31 s |
+
+![none-optimized](./figures/none-optimized.png)
+
+![coding-optimized](./figures/coding-optimized.png)
+
+![communication-optimized](./figures/communication-optimized.png)
+
+![configuration-optimized](./figures/configuration-optimized.png)
+
+![all-optimized](./figures/all-optimized.png)
