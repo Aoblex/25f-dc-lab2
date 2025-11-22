@@ -30,14 +30,14 @@ test: dataset
 	--master yarn \
 	--deploy-mode cluster \
 	--name Taxi-Rideshare-Recommendation \
-	scripts/starter_script_structured.py --taxi_path hdfs:///input/nyc_taxi/sample
+	scripts/starter_script.py --taxi_path hdfs:///input/nyc_taxi/sample
 
 full: dataset
 	spark-submit \
 	--master yarn \
 	--deploy-mode cluster \
 	--name Taxi-Rideshare-Recommendation \
-	scripts/starter_script_structured.py --taxi_path hdfs:///input/nyc_taxi/
+	scripts/starter_script.py --taxi_path hdfs:///input/nyc_taxi/
 
 # Optimized version targets
 optimized-test: dataset
