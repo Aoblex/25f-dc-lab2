@@ -12,6 +12,11 @@ def read_and_clean_data(spark, taxi_path):
     df_raw = spark.read.parquet(taxi_path)
     df = (
         df_raw
+        .select(
+            "pickup_datetime", "dropoff_datetime",
+            "pickup_latitude", "pickup_longitude",
+            "trip_distance", "passenger_count",
+        )
         .filter(F.col("pickup_datetime").isNotNull())
         .filter(F.col("dropoff_datetime").isNotNull())
         .filter(F.col("pickup_longitude").isNotNull())
