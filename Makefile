@@ -68,15 +68,8 @@ optimized-full: dataset
 	--name Taxi-Rideshare-Recommendation-Optimized \
 	scripts/optimized.py --taxi_path hdfs:///input/nyc_taxi/
 
-# Local testing targets (for development)
-optimized-local-test:
-	python scripts/optimized.py --taxi_path ./datasets/sample/*.parquet
-
-optimized-local-full:
-	python scripts/optimized.py --taxi_path ./datasets/*.parquet
-
 clean:
 	rm -rf ./datasets/*
 	hdfs dfs -rm -r -f /input/nyc_taxi/
 
-.PHONY: download-dataset sample-dataset taxi-zone put-dataset dataset test full optimized-test optimized-full optimized-local-test optimized-local-full clean
+.PHONY: download-dataset sample-dataset taxi-zone put-dataset dataset test full optimized-test optimized-full clean
