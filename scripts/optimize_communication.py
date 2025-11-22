@@ -59,6 +59,7 @@ def feature_engineering(df):
 def build_candidates(df_feat):
     df_small = (
         df_feat
+        .withColumn("pickup_date", F.to_date("pickup_ts"))
         .select(
             "pickup_date", "pickup_hour", "pickup_zone",
             "pickup_latitude", "pickup_longitude",
