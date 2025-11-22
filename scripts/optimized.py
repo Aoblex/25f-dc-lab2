@@ -58,14 +58,17 @@ def build_candidates(df_feat):
         )
     )
 
+    # 按 join key 重新分区，减少 shuffle
+    repart_keys = ["pickup_date", "pickup_hour", "pickup_zone"]
+    df_small = df_small.repartition(*repart_keys).persist()
+
     a = df_small.alias("a")
     b = df_small.alias("b")
 
     join_cond = (
         (F.col("a.pickup_date") == F.col("b.pickup_date")) &
-        (F.col("a.pickup_hour") == F.col("b.pickup_hour"))
-        # 注意：此步仅编程范式优化，zone 还不加入
-        &
+        (F.col("a.pickup_hour") == F.col("b.pickup_hour")) &
+        (F.col("a.pickup_zone") == F.col("b.pickup_zone")) &
         (F.col("a.pickup_datetime") < F.col("b.pickup_datetime"))
     )
 
