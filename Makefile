@@ -30,6 +30,8 @@ test: dataset
 	--master yarn \
 	--deploy-mode cluster \
 	--name Taxi-Rideshare-Recommendation \
+	--conf spark.eventLog.enabled=true \
+	--conf spark.eventLog.dir=hdfs:///spark-logs \
 	scripts/starter_script.py --taxi_path hdfs:///input/nyc_taxi/sample
 
 full: dataset
@@ -37,6 +39,8 @@ full: dataset
 	--master yarn \
 	--deploy-mode cluster \
 	--name Taxi-Rideshare-Recommendation \
+	--conf spark.eventLog.enabled=true \
+	--conf spark.eventLog.dir=hdfs:///spark-logs \
 	scripts/starter_script.py --taxi_path hdfs:///input/nyc_taxi/
 
 # Optimized version targets
