@@ -5,8 +5,8 @@ sample-dataset: download-dataset
 	python scripts/sampling.py \
 	--input ./datasets \
 	--output ./datasets/sample \
-	--rows 250 \
-	--batch-size 50
+	--rows 10000 \
+	--batch-size 100
 
 taxi-zone:
 	@if [ ! -d "datasets/taxi_zones" ]; then \
@@ -49,6 +49,8 @@ optimized-test: dataset
 	--conf spark.sql.adaptive.skewJoin.enabled=true \
 	--conf spark.sql.shuffle.partitions=200 \
 	--conf spark.default.parallelism=24 \
+	--conf spark.eventLog.enabled=true \
+	--conf spark.eventLog.dir=hdfs:///spark-logs \
 	--name Taxi-Rideshare-Recommendation-Optimized \
 	scripts/optimized.py --taxi_path hdfs:///input/nyc_taxi/sample
 
@@ -61,6 +63,8 @@ optimized-full: dataset
 	--conf spark.sql.adaptive.skewJoin.enabled=true \
 	--conf spark.sql.shuffle.partitions=200 \
 	--conf spark.default.parallelism=24 \
+	--conf spark.eventLog.enabled=true \
+	--conf spark.eventLog.dir=hdfs:///spark-logs \
 	--name Taxi-Rideshare-Recommendation-Optimized \
 	scripts/optimized.py --taxi_path hdfs:///input/nyc_taxi/
 
