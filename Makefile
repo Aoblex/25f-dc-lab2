@@ -5,8 +5,8 @@ sample-dataset: download-dataset
 	python scripts/sampling.py \
 	--input ./datasets \
 	--output ./datasets/sample \
-	--rows 10000 \
-	--batch-size 100
+	--rows 50000 \
+	--batch-size 1000
 
 taxi-zone:
 	@if [ ! -d "datasets/taxi_zones" ]; then \
