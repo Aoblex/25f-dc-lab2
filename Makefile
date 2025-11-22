@@ -26,6 +26,7 @@ dataset: sample-dataset put-dataset
 
 # Original starter script targets
 test: dataset
+	hdfs dfs -mkdir -p /spark-logs
 	spark-submit \
 	--master yarn \
 	--deploy-mode cluster \
@@ -35,6 +36,7 @@ test: dataset
 	scripts/starter_script.py --taxi_path hdfs:///input/nyc_taxi/sample
 
 full: dataset
+	hdfs dfs -mkdir -p /spark-logs
 	spark-submit \
 	--master yarn \
 	--deploy-mode cluster \
@@ -45,6 +47,7 @@ full: dataset
 
 # Optimized version targets
 optimized-test: dataset
+	hdfs dfs -mkdir -p /spark-logs
 	spark-submit \
 	--master yarn \
 	--deploy-mode cluster \
@@ -59,6 +62,7 @@ optimized-test: dataset
 	scripts/optimized.py --taxi_path hdfs:///input/nyc_taxi/sample
 
 optimized-full: dataset
+	hdfs dfs -mkdir -p /spark-logs
 	spark-submit \
 	--master yarn \
 	--deploy-mode cluster \
