@@ -5,7 +5,7 @@ sample-dataset: download-dataset
 	python scripts/sampling.py \
 	--input ./datasets \
 	--output ./datasets/sample \
-	--rows 50000 \
+	--rows 5000 \
 	--batch-size 1000
 
 taxi-zone:
