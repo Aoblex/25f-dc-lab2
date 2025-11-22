@@ -35,7 +35,8 @@ test: dataset
 	--conf spark.eventLog.dir=hdfs:///spark-logs \
 	scripts/starter_script.py --taxi_path hdfs:///input/nyc_taxi/sample
 
-full: dataset
+# Partially optimized targets
+coding-optimized-test: dataset
 	hdfs dfs -mkdir -p /spark-logs
 	spark-submit \
 	--master yarn \
@@ -43,9 +44,34 @@ full: dataset
 	--name Taxi-Rideshare-Recommendation \
 	--conf spark.eventLog.enabled=true \
 	--conf spark.eventLog.dir=hdfs:///spark-logs \
-	scripts/starter_script.py --taxi_path hdfs:///input/nyc_taxi/
+	scripts/optimize_coding.py --taxi_path hdfs:///input/nyc_taxi/sample
 
-# Optimized version targets
+communication-optimized-test: dataset
+	hdfs dfs -mkdir -p /spark-logs
+	spark-submit \
+	--master yarn \
+	--deploy-mode cluster \
+	--name Taxi-Rideshare-Recommendation \
+	--conf spark.eventLog.enabled=true \
+	--conf spark.eventLog.dir=hdfs:///spark-logs \
+	scripts/optimize_communication.py --taxi_path hdfs:///input/nyc_taxi/sample
+
+configuration-optimized-test: dataset
+	hdfs dfs -mkdir -p /spark-logs
+	spark-submit \
+	--master yarn \
+	--deploy-mode cluster \
+	--conf spark.sql.adaptive.enabled=true \
+	--conf spark.sql.adaptive.coalescePartitions.enabled=true \
+	--conf spark.sql.adaptive.skewJoin.enabled=true \
+	--conf spark.sql.shuffle.partitions=200 \
+	--conf spark.default.parallelism=24 \
+	--conf spark.eventLog.enabled=true \
+	--conf spark.eventLog.dir=hdfs:///spark-logs \
+	--name Taxi-Rideshare-Recommendation-Optimized \
+	scripts/starter_script.py --taxi_path hdfs:///input/nyc_taxi/sample
+
+# Fully optimized version targets
 optimized-test: dataset
 	hdfs dfs -mkdir -p /spark-logs
 	spark-submit \
@@ -60,6 +86,18 @@ optimized-test: dataset
 	--conf spark.eventLog.dir=hdfs:///spark-logs \
 	--name Taxi-Rideshare-Recommendation-Optimized \
 	scripts/optimized.py --taxi_path hdfs:///input/nyc_taxi/sample
+
+compare-tests: test coding-optimized-test communication-optimized-test configuration-optimized-test optimized-test
+
+full: dataset
+	hdfs dfs -mkdir -p /spark-logs
+	spark-submit \
+	--master yarn \
+	--deploy-mode cluster \
+	--name Taxi-Rideshare-Recommendation \
+	--conf spark.eventLog.enabled=true \
+	--conf spark.eventLog.dir=hdfs:///spark-logs \
+	scripts/starter_script.py --taxi_path hdfs:///input/nyc_taxi/
 
 optimized-full: dataset
 	hdfs dfs -mkdir -p /spark-logs
@@ -79,5 +117,3 @@ optimized-full: dataset
 clean:
 	rm -rf ./datasets/*
 	hdfs dfs -rm -r -f /input/nyc_taxi/
-
-.PHONY: download-dataset sample-dataset taxi-zone put-dataset dataset test full optimized-test optimized-full clean
