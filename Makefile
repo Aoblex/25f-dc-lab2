@@ -117,3 +117,11 @@ optimized-full: dataset
 clean:
 	rm -rf ./datasets/*
 	hdfs dfs -rm -r -f /input/nyc_taxi/
+
+archive:
+	@tar -czf lab2-submission.tar.gz \
+		Makefile \
+		*.md \
+		scripts/ \
+		figures/
+	@echo "Archive created: lab2-submission.tar.gz"
