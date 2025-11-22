@@ -24,6 +24,7 @@ put-dataset: taxi-zone download-dataset
 
 dataset: sample-dataset put-dataset
 
+# Original starter script targets
 test: dataset
 	spark-submit \
 	--master yarn \
@@ -38,6 +39,40 @@ full: dataset
 	--name Taxi-Rideshare-Recommendation \
 	scripts/starter_script_structured.py --taxi_path hdfs:///input/nyc_taxi/
 
+# Optimized version targets
+optimized-test: dataset
+	spark-submit \
+	--master yarn \
+	--deploy-mode cluster \
+	--conf spark.sql.adaptive.enabled=true \
+	--conf spark.sql.adaptive.coalescePartitions.enabled=true \
+	--conf spark.sql.adaptive.skewJoin.enabled=true \
+	--conf spark.sql.shuffle.partitions=200 \
+	--conf spark.default.parallelism=24 \
+	--name Taxi-Rideshare-Recommendation-Optimized \
+	scripts/optimized.py --taxi_path hdfs:///input/nyc_taxi/sample
+
+optimized-full: dataset
+	spark-submit \
+	--master yarn \
+	--deploy-mode cluster \
+	--conf spark.sql.adaptive.enabled=true \
+	--conf spark.sql.adaptive.coalescePartitions.enabled=true \
+	--conf spark.sql.adaptive.skewJoin.enabled=true \
+	--conf spark.sql.shuffle.partitions=200 \
+	--conf spark.default.parallelism=24 \
+	--name Taxi-Rideshare-Recommendation-Optimized \
+	scripts/optimized.py --taxi_path hdfs:///input/nyc_taxi/
+
+# Local testing targets (for development)
+optimized-local-test:
+	python scripts/optimized.py --taxi_path ./datasets/sample/*.parquet
+
+optimized-local-full:
+	python scripts/optimized.py --taxi_path ./datasets/*.parquet
+
 clean:
 	rm -rf ./datasets/*
 	hdfs dfs -rm -r -f /input/nyc_taxi/
+
+.PHONY: download-dataset sample-dataset taxi-zone put-dataset dataset test full optimized-test optimized-full optimized-local-test optimized-local-full clean
