@@ -27,39 +27,30 @@ def read_and_clean_data(spark, taxi_path):
 
 
 def feature_engineering(df):
-    @F.udf("int")
-    def get_hour(ts):
-        return int(ts.hour) if ts else None
-
-    @F.udf("string")
-    def bucket_distance(d):
-        if d is None:
-            return "unknown"
-        elif d < 2:
-            return "short"
-        elif d < 8:
-            return "medium"
-        else:
-            return "long"
-
+    # 使用内置函数替代 UDF
     df_feat = (
         df
         .withColumn("pickup_ts", F.to_timestamp("pickup_datetime"))
-        .withColumn("pickup_hour", get_hour(F.col("pickup_ts")))
-        .withColumn("pickup_grid_x", (F.col("pickup_longitude") * 100).cast("int"))
-        .withColumn("pickup_grid_y", (F.col("pickup_latitude") * 100).cast("int"))
-        .withColumn("pickup_zone", F.concat_ws("_", "pickup_grid_x", "pickup_grid_y"))
-        .withColumn("distance_bucket", bucket_distance(F.col("trip_distance")))
+        .withColumn("pickup_hour", F.hour(F.col("pickup_ts")).cast("int"))
+        .withColumn("pickup_grid_x", F.floor(F.col("pickup_longitude") * 100).cast("int"))
+        .withColumn("pickup_grid_y", F.floor(F.col("pickup_latitude") * 100).cast("int"))
+        .withColumn("pickup_zone", F.concat_ws("_", F.col("pickup_grid_x"), F.col("pickup_grid_y")))
+        .withColumn(
+            "distance_bucket",
+            F.when(F.col("trip_distance").isNull(), F.lit("unknown"))
+             .when(F.col("trip_distance") < 2.0, F.lit("short"))
+             .when(F.col("trip_distance") < 8.0, F.lit("medium"))
+             .otherwise(F.lit("long"))
+        )
+        .withColumn("pickup_date", F.to_date("pickup_ts"))
     )
-
-    print("Sample rows:", df_feat.limit(5).collect())
+    df_feat.persist()  # 缓存
     return df_feat
 
 
 def build_candidates(df_feat):
     df_small = (
         df_feat
-        .withColumn("pickup_date", F.to_date("pickup_ts"))
         .select(
             "pickup_date", "pickup_hour", "pickup_zone",
             "pickup_latitude", "pickup_longitude",
@@ -67,36 +58,23 @@ def build_candidates(df_feat):
         )
     )
 
-    candidates = (
-        df_small.alias("a")
-        .join(
-            df_small.alias("b"),
-            on=[
-                F.col("a.pickup_date") == F.col("b.pickup_date"),
-                F.col("a.pickup_hour") == F.col("b.pickup_hour")
-            ],
-            how="inner"
-        )
-        .where(F.col("a.pickup_datetime") < F.col("b.pickup_datetime"))
+    a = df_small.alias("a")
+    b = df_small.alias("b")
+
+    join_cond = (
+        (F.col("a.pickup_date") == F.col("b.pickup_date")) &
+        (F.col("a.pickup_hour") == F.col("b.pickup_hour"))
+        # 注意：此步仅编程范式优化，zone 还不加入
+        &
+        (F.col("a.pickup_datetime") < F.col("b.pickup_datetime"))
     )
 
-    @F.udf("double")
-    def geo_distance(lat1, lon1, lat2, lon2):
-        if None in (lat1, lon1, lat2, lon2):
-            return 9999.0
-        return ((lat1 - lat2) ** 2 + (lon1 - lon2) ** 2) ** 0.5
+    candidates = a.join(b, on=join_cond, how="inner")
 
-    candidates = candidates.withColumn(
-        "pickup_distance",
-        geo_distance(
-            F.col("a.pickup_latitude"),
-            F.col("a.pickup_longitude"),
-            F.col("b.pickup_latitude"),
-            F.col("b.pickup_longitude"),
-        )
-    )
+    dx = F.col("a.pickup_latitude") - F.col("b.pickup_latitude")
+    dy = F.col("a.pickup_longitude") - F.col("b.pickup_longitude")
+    candidates = candidates.withColumn("pickup_distance", F.sqrt(F.pow(dx, 2) + F.pow(dy, 2)))
 
-    print("Candidate count:", candidates.count())
     return candidates
 
 
@@ -114,19 +92,13 @@ def train_model(candidates):
         )
     )
 
-    print("Training rows:", train_df.count())
-
     assembler = VectorAssembler(
         inputCols=["passenger_a", "passenger_b", "trip_a", "trip_b", "pickup_distance"],
         outputCol="features"
     )
-    train_vec = assembler.transform(train_df)
-
+    train_vec = assembler.transform(train_df).select("features", "label")
     lr = LogisticRegression(featuresCol="features", labelCol="label")
     model = lr.fit(train_vec)
-    pred = model.transform(train_vec)
-
-    print(pred.groupBy("label").count().collect())
     return model
 
 
